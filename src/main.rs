@@ -17,6 +17,11 @@ struct GridParams {
     line_color: graphics::Color,
 }
 
+/// Generates a `Mesh` for grid lines according to the
+/// given `GridParams`.
+///
+/// This should probably only be called once for each `GridParams`
+/// and have the resulting `Mesh` be cached.
 fn generate_grid_mesh(
     ctx: &mut ggez::Context,
     params: &GridParams,
@@ -53,28 +58,67 @@ fn generate_grid_mesh(
     builder.build(ctx)
 }
 
+/// Generates a `Mesh` for the grid cells according
+/// to the given `GridParams` and grid state.
+///
+/// `grid_state` **has** to be *horizontally packed*,
+/// meaning that the outer `Vec` holds many rows.
+///
+/// The dimensions of `grid_state` are taken from
+/// `params`, and are **not** checked. It's up to
+/// the caller to make sure they are synchronized (`grid_state` may be bigger).  
 fn generate_grid_cells_mesh(
     ctx: &mut ggez::Context,
     params: &GridParams,
     grid_state: &Vec<Vec<bool>>,
 ) -> ggez::GameResult<graphics::Mesh> {
     let mut builder = graphics::MeshBuilder::new();
+    let mut num_rectangles = 0;
 
-    Err(ggez::GameError::RenderError(String::from("No vertices in mesh")))
-    // let mesh = builder.build(ctx)?;
-    // Ok(mesh)
+    for row in 0..params.size.1 {
+        let y = (row * params.cell_size.1) as f32 + params.line_width * 0.5;
+        for column in 0..params.size.0 {
+            let x = (column * params.cell_size.0) as f32 + params.line_width * 0.5;
+
+            if grid_state[row][column] {
+                builder.rectangle(
+                    graphics::DrawMode::fill(),
+                    graphics::Rect::new(
+                        x,
+                        y,
+                        params.cell_size.0 as f32 - params.line_width,
+                        params.cell_size.1 as f32 - params.line_width,
+                    ),
+                    params.cell_color,
+                );
+                num_rectangles += 1;
+            }
+        }
+    }
+
+    // Only build the mesh if it isn't empty, as it
+    // currently causes a panic.
+    if num_rectangles > 0 {
+        let mesh = builder.build(ctx)?;
+        Ok(mesh)
+    } else {
+        Err(ggez::GameError::RenderError(String::from(
+            "No vertices in mesh",
+        )))
+    }
 }
 
 struct GameState {
     grid_params: GridParams,
     grid_mesh: graphics::Mesh,
+    grid_state: Vec<Vec<bool>>,
 }
 
 impl GameState {
     fn new(ctx: &mut ggez::Context) -> ggez::GameResult<GameState> {
         let params = GridParams {
             size: (4, 5),
-            cell_size: (64, 32),
+            cell_size: (64, 64),
             cell_color: graphics::BLACK,
             line_width: 2.0,
             line_color: graphics::WHITE,
@@ -83,6 +127,13 @@ impl GameState {
         let state = GameState {
             grid_params: params,
             grid_mesh: mesh,
+            grid_state: vec![
+                vec![true, true, true, true],
+                vec![true, false, false, true],
+                vec![true, false, false, true],
+                vec![true, false, false, true],
+                vec![true, true, true, true],
+            ]
         };
         Ok(state)
     }
@@ -98,14 +149,12 @@ impl event::EventHandler for GameState {
 
         // draw the grid outline
         graphics::draw(ctx, &self.grid_mesh, (na::Point2::new(0.0, 0.0),))?;
-        
         // draw the grid cells
-        let grid_cells_mesh = generate_grid_cells_mesh(ctx, &self.grid_params, &vec![vec![false]]);
+        let grid_cells_mesh = generate_grid_cells_mesh(ctx, &self.grid_params, &self.grid_state);
         match grid_cells_mesh {
             Ok(mesh) => graphics::draw(ctx, &mesh, (na::Point2::new(0.0, 0.0),))?,
             _ => (),
         }
-        
 
         // Print the fps counter to the screen.
         let fps_counter = graphics::Text::new(format!("{}", timer::fps(ctx) as i32));
