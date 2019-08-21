@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use ggez;
 use ggez::event;
 use ggez::graphics;
