@@ -3,7 +3,8 @@
 use ggez;
 use ggez::event;
 use ggez::graphics;
-use ggez::nalgebra as na;
+use ggez::input;
+use ggez::mint;
 use ggez::timer;
 
 struct GridParams {
@@ -36,8 +37,11 @@ fn generate_grid_mesh(
 
         builder.line(
             &[
-                na::Point2::new(x, 0.0),
-                na::Point2::new(x, (params.size.1 * params.cell_size.1) as f32),
+                mint::Point2 { x: x, y: 0.0 },
+                mint::Point2 {
+                    x: x,
+                    y: (params.size.1 * params.cell_size.1) as f32,
+                },
             ],
             params.line_width,
             params.line_color,
@@ -49,8 +53,11 @@ fn generate_grid_mesh(
 
         builder.line(
             &[
-                na::Point2::new(0.0, y),
-                na::Point2::new((params.size.0 * params.cell_size.0) as f32, y),
+                mint::Point2 { x: 0.0, y: y },
+                mint::Point2 {
+                    x: (params.size.0 * params.cell_size.0) as f32,
+                    y: y,
+                },
             ],
             params.line_width,
             params.line_color,
@@ -110,6 +117,16 @@ fn generate_grid_cells_mesh(
     }
 }
 
+/// Calculates the indice of the grid cell under the given point.Result
+///
+/// If point is **not** on a grid cell, return error.
+fn calculate_grid_cell_indices(
+    params: &GridParams,
+    point: mint::Point2<f32>,
+) -> Result<mint::Point2<usize>, ()> {
+    Err(())
+}
+
 struct GameState {
     grid_params: GridParams,
     grid_mesh: graphics::Mesh,
@@ -126,23 +143,26 @@ impl GameState {
             line_color: graphics::WHITE,
         };
         let mesh = generate_grid_mesh(ctx, &params)?;
+        let default_grid = vec![vec![false; params.size.0]; params.size.1];
         let state = GameState {
             grid_params: params,
             grid_mesh: mesh,
-            grid_state: vec![
-                vec![true, true, true, true],
-                vec![true, false, false, true],
-                vec![true, false, false, true],
-                vec![true, false, false, true],
-                vec![true, true, true, true],
-            ]
+            grid_state: default_grid,
         };
         Ok(state)
     }
 }
 
 impl event::EventHandler for GameState {
-    fn update(&mut self, _ctx: &mut ggez::Context) -> ggez::GameResult {
+    fn update(&mut self, ctx: &mut ggez::Context) -> ggez::GameResult {
+        if input::mouse::button_pressed(ctx, input::mouse::MouseButton::Left) {
+            let position = input::mouse::position(ctx);
+            match calculate_grid_cell_indices(&self.grid_params, position) {
+                Err(()) => (),
+                Ok(point) => {}
+            }
+        }
+
         Ok(())
     }
 
@@ -150,17 +170,17 @@ impl event::EventHandler for GameState {
         graphics::clear(ctx, [0.1, 0.2, 0.3, 1.0].into());
 
         // draw the grid outline
-        graphics::draw(ctx, &self.grid_mesh, (na::Point2::new(0.0, 0.0),))?;
+        graphics::draw(ctx, &self.grid_mesh, (mint::Point2 { x: 0.0, y: 0.0 },))?;
         // draw the grid cells
         let grid_cells_mesh = generate_grid_cells_mesh(ctx, &self.grid_params, &self.grid_state);
         match grid_cells_mesh {
-            Ok(mesh) => graphics::draw(ctx, &mesh, (na::Point2::new(0.0, 0.0),))?,
+            Ok(mesh) => graphics::draw(ctx, &mesh, (mint::Point2 { x: 0.0, y: 0.0 },))?,
             _ => (),
         }
 
         // Print the fps counter to the screen.
         let fps_counter = graphics::Text::new(format!("{}", timer::fps(ctx) as i32));
-        graphics::draw(ctx, &fps_counter, (na::Point2::new(0.0, 0.0),))?;
+        graphics::draw(ctx, &fps_counter, (mint::Point2 { x: 0.0, y: 0.0 },))?;
 
         graphics::present(ctx)?;
         Ok(())
