@@ -124,13 +124,21 @@ fn calculate_grid_cell_indices(
     params: &GridParams,
     point: mint::Point2<f32>,
 ) -> Result<mint::Point2<usize>, ()> {
-    Err(())
+    let x: usize = (point.x / params.cell_size.0 as f32) as usize;
+    let y: usize = (point.y / params.cell_size.1 as f32) as usize;
+
+    if x < params.size.0 && y < params.size.1 {
+        Ok(mint::Point2 { x: x, y: y })
+    } else {
+        Err(())
+    }
 }
 
 struct GameState {
     grid_params: GridParams,
     grid_mesh: graphics::Mesh,
     grid_state: Vec<Vec<bool>>,
+    mouse_button_pressed_last_frame: bool,
 }
 
 impl GameState {
@@ -148,6 +156,7 @@ impl GameState {
             grid_params: params,
             grid_mesh: mesh,
             grid_state: default_grid,
+            mouse_button_pressed_last_frame: false,
         };
         Ok(state)
     }
@@ -155,13 +164,19 @@ impl GameState {
 
 impl event::EventHandler for GameState {
     fn update(&mut self, ctx: &mut ggez::Context) -> ggez::GameResult {
-        if input::mouse::button_pressed(ctx, input::mouse::MouseButton::Left) {
+        let pressed = input::mouse::button_pressed(ctx, input::mouse::MouseButton::Left);
+        if self.mouse_button_pressed_last_frame && !pressed {
             let position = input::mouse::position(ctx);
+            println!("Click!");
             match calculate_grid_cell_indices(&self.grid_params, position) {
                 Err(()) => (),
-                Ok(point) => {}
+                Ok(point) => {
+                    let value = self.grid_state[point.y][point.x];
+                    self.grid_state[point.y][point.x] = !value;
+                }
             }
         }
+        self.mouse_button_pressed_last_frame = pressed;
 
         Ok(())
     }
