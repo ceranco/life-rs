@@ -139,6 +139,7 @@ struct GameState {
     grid_mesh: graphics::Mesh,
     grid_state: Vec<Vec<bool>>,
     mouse_button_pressed_last_frame: bool,
+    space_key_pressed_last_frame: bool,
 }
 
 impl GameState {
@@ -157,6 +158,7 @@ impl GameState {
             grid_mesh: mesh,
             grid_state: default_grid,
             mouse_button_pressed_last_frame: false,
+            space_key_pressed_last_frame: false,
         };
         Ok(state)
     }
@@ -167,7 +169,6 @@ impl event::EventHandler for GameState {
         let pressed = input::mouse::button_pressed(ctx, input::mouse::MouseButton::Left);
         if self.mouse_button_pressed_last_frame && !pressed {
             let position = input::mouse::position(ctx);
-            println!("Click!");
             match calculate_grid_cell_indices(&self.grid_params, position) {
                 Err(()) => (),
                 Ok(point) => {
@@ -177,6 +178,13 @@ impl event::EventHandler for GameState {
             }
         }
         self.mouse_button_pressed_last_frame = pressed;
+
+        let pressed = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::S);
+        if !self.space_key_pressed_last_frame && pressed {
+            let serialized = serde_json::to_string(&self.grid_state).unwrap();
+            println!("serialized = {}", serialized);
+        }
+        self.space_key_pressed_last_frame = pressed;
 
         Ok(())
     }
