@@ -142,7 +142,8 @@ struct GameState {
     grid_mesh: graphics::Mesh,
     grid_state: Vec<Vec<bool>>,
     mouse_button_pressed_last_frame: bool,
-    space_key_pressed_last_frame: bool,
+    save_key_pressed_last_frame: bool,
+    load_key_pressed_last_frame: bool,
 }
 
 impl GameState {
@@ -161,7 +162,8 @@ impl GameState {
             grid_mesh: mesh,
             grid_state: default_grid,
             mouse_button_pressed_last_frame: false,
-            space_key_pressed_last_frame: false,
+            save_key_pressed_last_frame: false,
+            load_key_pressed_last_frame: false,
         };
         Ok(state)
     }
@@ -183,7 +185,7 @@ impl event::EventHandler for GameState {
         self.mouse_button_pressed_last_frame = pressed;
 
         let pressed = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::S);
-        if !self.space_key_pressed_last_frame && pressed {
+        if !self.save_key_pressed_last_frame && pressed {
             match tinyfiledialogs::save_file_dialog("Save", "./grid-state.json") {
                 None => (),
                 Some(file) => {
@@ -196,7 +198,30 @@ impl event::EventHandler for GameState {
             }
             
         }
-        self.space_key_pressed_last_frame = pressed;
+        self.save_key_pressed_last_frame = pressed;
+
+        let pressed = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::L);
+        if !self.load_key_pressed_last_frame && pressed {
+            match tinyfiledialogs::open_file_dialog("Open", "./", None) {
+                None => (),
+                Some(file) => {
+                    match File::open(file) {
+                        Ok(mut file) => {
+                            let mut file_contents =  String::new();
+                            file.read_to_string(&mut file_contents).unwrap();
+
+                            match serde_json::from_str(&file_contents) {
+                                Ok(deserialized) => self.grid_state = deserialized,
+                                _ => ()
+                            }
+                        }
+                        _ => (),
+                    }
+                },
+            }
+            
+        }
+        self.load_key_pressed_last_frame = pressed;
 
         Ok(())
     }
