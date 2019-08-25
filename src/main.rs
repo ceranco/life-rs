@@ -6,6 +6,9 @@ use ggez::graphics;
 use ggez::input;
 use ggez::mint;
 use ggez::timer;
+use tinyfiledialogs;
+use std::fs::File;
+use std::io::prelude::*;
 
 struct GridParams {
     /// The number of cells in each (row, column) of the grid.
@@ -181,8 +184,17 @@ impl event::EventHandler for GameState {
 
         let pressed = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::S);
         if !self.space_key_pressed_last_frame && pressed {
-            let serialized = serde_json::to_string(&self.grid_state).unwrap();
-            println!("serialized = {}", serialized);
+            match tinyfiledialogs::save_file_dialog("Save", "./grid-state.json") {
+                None => (),
+                Some(file) => {
+                    let serialized = serde_json::to_string(&self.grid_state).unwrap();
+                    match File::create(file) {
+                        Ok(mut file) => file.write_all(serialized.as_bytes()).unwrap(),
+                        _ => (),
+                    }                    
+                },
+            }
+            
         }
         self.space_key_pressed_last_frame = pressed;
 
