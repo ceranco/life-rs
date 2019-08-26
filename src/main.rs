@@ -6,9 +6,9 @@ use ggez::graphics;
 use ggez::input;
 use ggez::mint;
 use ggez::timer;
-use tinyfiledialogs;
 use std::fs::File;
 use std::io::prelude::*;
+use tinyfiledialogs;
 
 struct GridParams {
     /// The number of cells in each (row, column) of the grid.
@@ -193,10 +193,9 @@ impl event::EventHandler for GameState {
                     match File::create(file) {
                         Ok(mut file) => file.write_all(serialized.as_bytes()).unwrap(),
                         _ => (),
-                    }                    
-                },
+                    }
+                }
             }
-            
         }
         self.save_key_pressed_last_frame = pressed;
 
@@ -204,22 +203,26 @@ impl event::EventHandler for GameState {
         if !self.load_key_pressed_last_frame && pressed {
             match tinyfiledialogs::open_file_dialog("Open", "./", None) {
                 None => (),
-                Some(file) => {
-                    match File::open(file) {
-                        Ok(mut file) => {
-                            let mut file_contents =  String::new();
-                            file.read_to_string(&mut file_contents).unwrap();
+                Some(file) => match File::open(file) {
+                    Ok(mut file) => {
+                        let mut file_contents = String::new();
+                        file.read_to_string(&mut file_contents).unwrap();
 
-                            match serde_json::from_str(&file_contents) {
-                                Ok(deserialized) => self.grid_state = deserialized,
-                                _ => ()
+                        match serde_json::from_str(&file_contents) {
+                            Ok(deserialized) => {
+                                self.grid_state = deserialized;
+                                let new_size = (self.grid_state[0].len(), self.grid_state.len());
+                                if self.grid_params.size != new_size {
+                                    self.grid_params.size = new_size;
+                                    self.grid_mesh = generate_grid_mesh(ctx, &self.grid_params)?;
+                                }
                             }
+                            _ => (),
                         }
-                        _ => (),
                     }
+                    _ => (),
                 },
             }
-            
         }
         self.load_key_pressed_last_frame = pressed;
 
