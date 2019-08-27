@@ -137,23 +137,77 @@ fn calculate_grid_cell_indices(
     }
 }
 
+fn update_grid_state(params: &GridParams, grid_state: &Vec<Vec<bool>>) -> Vec<Vec<bool>> {
+    let mut new_state = grid_state.clone();
+    // Update each cell in the grid.
+    for row in 0..params.size.1 {
+        for column in 0..params.size.0 {
+            const INDICE_OFFSETS: [[isize; 2]; 8] = [
+                [-1, -1],
+                [0, -1],
+                [1, -1],
+                [-1, 0],
+                [1, 0],
+                [-1, 1],
+                [0, 1],
+                [1, 1],
+            ];
+
+            // Check neighbors.
+            let mut living_neighbors: u32 = 0;
+            for indices in &INDICE_OFFSETS {
+                let x = column as isize + indices[0];
+                let y = row as isize + indices[1];
+
+                if (0..(params.size.0 as isize)).contains(&x)
+                    && (0..(params.size.1 as isize)).contains(&y)
+                {
+                    living_neighbors += if grid_state[y as usize][x as usize] {
+                        1
+                    } else {
+                        0
+                    };
+                }
+            }
+
+            let is_living = grid_state[row][column];
+            if is_living {
+                // Any live cell with fewer than two live neighbours dies, as if by underpopulation.
+                // Any live cell with more than three live neighbours dies, as if by overpopulation.
+                if living_neighbors < 2 || living_neighbors > 3 {
+                    new_state[row][column] = false;
+                }
+            }
+            // Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
+            else if living_neighbors == 3 {
+                new_state[row][column] = true;
+            }
+        }
+    }
+    new_state
+}
+
 struct GameState {
     grid_params: GridParams,
     grid_mesh: graphics::Mesh,
     grid_state: Vec<Vec<bool>>,
+    playing: bool,
+    last_update: std::time::Duration,
+    update_tick: std::time::Duration,
     mouse_button_pressed_last_frame: bool,
     save_key_pressed_last_frame: bool,
     load_key_pressed_last_frame: bool,
+    play_key_pressed_last_frame: bool,
 }
 
 impl GameState {
     fn new(ctx: &mut ggez::Context) -> ggez::GameResult<GameState> {
         let params = GridParams {
-            size: (4, 5),
-            cell_size: (64, 64),
-            cell_color: graphics::BLACK,
-            line_width: 2.0,
-            line_color: graphics::WHITE,
+            size: (50, 40),
+            cell_size: (20, 20),
+            cell_color: graphics::WHITE,
+            line_width: 1.5,
+            line_color: graphics::BLACK,
         };
         let mesh = generate_grid_mesh(ctx, &params)?;
         let default_grid = vec![vec![false; params.size.0]; params.size.1];
@@ -161,9 +215,13 @@ impl GameState {
             grid_params: params,
             grid_mesh: mesh,
             grid_state: default_grid,
+            playing: false,
+            last_update: std::time::Duration::default(),
+            update_tick: std::time::Duration::from_millis(10),
             mouse_button_pressed_last_frame: false,
             save_key_pressed_last_frame: false,
             load_key_pressed_last_frame: false,
+            play_key_pressed_last_frame: false,
         };
         Ok(state)
     }
@@ -171,60 +229,75 @@ impl GameState {
 
 impl event::EventHandler for GameState {
     fn update(&mut self, ctx: &mut ggez::Context) -> ggez::GameResult {
-        let pressed = input::mouse::button_pressed(ctx, input::mouse::MouseButton::Left);
-        if self.mouse_button_pressed_last_frame && !pressed {
-            let position = input::mouse::position(ctx);
-            match calculate_grid_cell_indices(&self.grid_params, position) {
-                Err(()) => (),
-                Ok(point) => {
-                    let value = self.grid_state[point.y][point.x];
-                    self.grid_state[point.y][point.x] = !value;
-                }
-            }
-        }
-        self.mouse_button_pressed_last_frame = pressed;
-
-        let pressed = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::S);
-        if !self.save_key_pressed_last_frame && pressed {
-            match tinyfiledialogs::save_file_dialog("Save", "./grid-state.json") {
-                None => (),
-                Some(file) => {
-                    let serialized = serde_json::to_string(&self.grid_state).unwrap();
-                    match File::create(file) {
-                        Ok(mut file) => file.write_all(serialized.as_bytes()).unwrap(),
-                        _ => (),
+        let time = ggez::timer::time_since_start(ctx);
+        if !self.playing {
+            let pressed = input::mouse::button_pressed(ctx, input::mouse::MouseButton::Left);
+            if self.mouse_button_pressed_last_frame && !pressed {
+                let position = input::mouse::position(ctx);
+                match calculate_grid_cell_indices(&self.grid_params, position) {
+                    Err(()) => (),
+                    Ok(point) => {
+                        let value = self.grid_state[point.y][point.x];
+                        self.grid_state[point.y][point.x] = !value;
                     }
                 }
             }
-        }
-        self.save_key_pressed_last_frame = pressed;
+            self.mouse_button_pressed_last_frame = pressed;
 
-        let pressed = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::L);
-        if !self.load_key_pressed_last_frame && pressed {
-            match tinyfiledialogs::open_file_dialog("Open", "./", None) {
-                None => (),
-                Some(file) => match File::open(file) {
-                    Ok(mut file) => {
-                        let mut file_contents = String::new();
-                        file.read_to_string(&mut file_contents).unwrap();
-
-                        match serde_json::from_str(&file_contents) {
-                            Ok(deserialized) => {
-                                self.grid_state = deserialized;
-                                let new_size = (self.grid_state[0].len(), self.grid_state.len());
-                                if self.grid_params.size != new_size {
-                                    self.grid_params.size = new_size;
-                                    self.grid_mesh = generate_grid_mesh(ctx, &self.grid_params)?;
-                                }
-                            }
+            let pressed = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::S);
+            if !self.save_key_pressed_last_frame && pressed {
+                match tinyfiledialogs::save_file_dialog("Save", "./grid-state.json") {
+                    None => (),
+                    Some(file) => {
+                        let serialized = serde_json::to_string(&self.grid_state).unwrap();
+                        match File::create(file) {
+                            Ok(mut file) => file.write_all(serialized.as_bytes()).unwrap(),
                             _ => (),
                         }
                     }
-                    _ => (),
-                },
+                }
             }
+            self.save_key_pressed_last_frame = pressed;
+
+            let pressed = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::L);
+            if !self.load_key_pressed_last_frame && pressed {
+                match tinyfiledialogs::open_file_dialog("Open", "./", None) {
+                    None => (),
+                    Some(file) => match File::open(file) {
+                        Ok(mut file) => {
+                            let mut file_contents = String::new();
+                            file.read_to_string(&mut file_contents).unwrap();
+
+                            match serde_json::from_str(&file_contents) {
+                                Ok(deserialized) => {
+                                    self.grid_state = deserialized;
+                                    let new_size =
+                                        (self.grid_state[0].len(), self.grid_state.len());
+                                    if self.grid_params.size != new_size {
+                                        self.grid_params.size = new_size;
+                                        self.grid_mesh =
+                                            generate_grid_mesh(ctx, &self.grid_params)?;
+                                    }
+                                }
+                                _ => (),
+                            }
+                        }
+                        _ => (),
+                    },
+                }
+            }
+            self.load_key_pressed_last_frame = pressed;
+        } else if (time - self.last_update) >= self.update_tick {
+            self.grid_state = update_grid_state(&self.grid_params, &self.grid_state);
+            self.last_update = time;
         }
-        self.load_key_pressed_last_frame = pressed;
+
+        let pressed = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::Return);
+        if !self.play_key_pressed_last_frame && pressed {
+            self.last_update = time - self.update_tick;
+            self.playing = !self.playing;
+        }
+        self.play_key_pressed_last_frame = pressed;
 
         Ok(())
     }
@@ -251,11 +324,12 @@ impl event::EventHandler for GameState {
 }
 
 pub fn main() -> ggez::GameResult {
-    let cb = ggez::ContextBuilder::new("life-rs", "Eran Cohen").window_setup(
-        ggez::conf::WindowSetup::default()
-            .title("Game of Life")
-            .vsync(true),
-    );
+    let cb = ggez::ContextBuilder::new("life-rs", "Eran Cohen")
+        .window_setup(
+            ggez::conf::WindowSetup::default()
+                .title("Game of Life")
+                .vsync(true),
+        );
     let (ctx, event_loop) = &mut cb.build()?;
     let state = &mut GameState::new(ctx)?;
     event::run(ctx, event_loop, state)
