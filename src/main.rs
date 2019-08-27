@@ -137,6 +137,9 @@ fn calculate_grid_cell_indices(
     }
 }
 
+/// Updates the grid state according to the rules of Game of Life.
+///
+/// Returns a **new** grid_state.
 fn update_grid_state(params: &GridParams, grid_state: &Vec<Vec<bool>>) -> Vec<Vec<bool>> {
     let mut new_state = grid_state.clone();
     // Update each cell in the grid.
@@ -187,6 +190,19 @@ fn update_grid_state(params: &GridParams, grid_state: &Vec<Vec<bool>>) -> Vec<Ve
     new_state
 }
 
+/// Updates the size of the window according to the given grid parameters.ggez
+///
+/// Calls `graphics::set_mode`.
+fn update_window_size(ctx: &mut ggez::Context, params: &GridParams) -> ggez::GameResult {
+    graphics::set_mode(
+        ctx,
+        ggez::conf::WindowMode::default().dimensions(
+            (params.size.0 * params.cell_size.0) as f32,
+            (params.size.1 * params.cell_size.1) as f32,
+        ),
+    )
+}
+
 struct GameState {
     grid_params: GridParams,
     grid_mesh: graphics::Mesh,
@@ -203,12 +219,14 @@ struct GameState {
 impl GameState {
     fn new(ctx: &mut ggez::Context) -> ggez::GameResult<GameState> {
         let params = GridParams {
-            size: (50, 40),
+            size: (20, 15),
             cell_size: (20, 20),
             cell_color: graphics::WHITE,
-            line_width: 1.5,
+            line_width: 5.0,
             line_color: graphics::BLACK,
         };
+        update_window_size(ctx, &params)?;
+
         let mesh = generate_grid_mesh(ctx, &params)?;
         let default_grid = vec![vec![false; params.size.0]; params.size.1];
         let state = GameState {
@@ -277,6 +295,7 @@ impl event::EventHandler for GameState {
                                         self.grid_params.size = new_size;
                                         self.grid_mesh =
                                             generate_grid_mesh(ctx, &self.grid_params)?;
+                                        update_window_size(ctx, &self.grid_params)?;
                                     }
                                 }
                                 _ => (),
@@ -321,15 +340,19 @@ impl event::EventHandler for GameState {
         graphics::present(ctx)?;
         Ok(())
     }
+
+    fn resize_event(&mut self, ctx: &mut ggez::Context, width: f32, height: f32) {
+        graphics::set_screen_coordinates(ctx, graphics::Rect::new(0.0, 0.0, width, height))
+            .unwrap();
+    }
 }
 
 pub fn main() -> ggez::GameResult {
-    let cb = ggez::ContextBuilder::new("life-rs", "Eran Cohen")
-        .window_setup(
-            ggez::conf::WindowSetup::default()
-                .title("Game of Life")
-                .vsync(true),
-        );
+    let cb = ggez::ContextBuilder::new("life-rs", "Eran Cohen").window_setup(
+        ggez::conf::WindowSetup::default()
+            .title("Game of Life")
+            .vsync(true),
+    );
     let (ctx, event_loop) = &mut cb.build()?;
     let state = &mut GameState::new(ctx)?;
     event::run(ctx, event_loop, state)
