@@ -222,7 +222,7 @@ impl GameState {
             size: (20, 15),
             cell_size: (20, 20),
             cell_color: graphics::WHITE,
-            line_width: 5.0,
+            line_width: 2.0,
             line_color: graphics::BLACK,
         };
         update_window_size(ctx, &params)?;
