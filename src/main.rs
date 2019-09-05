@@ -352,7 +352,7 @@ pub fn main() -> ggez::GameResult {
         ggez::conf::WindowSetup::default()
             .title("Game of Life")
             .vsync(true),
-    );
+    ).with_conf_file(false);
     let (ctx, event_loop) = &mut cb.build()?;
     let state = &mut GameState::new(ctx)?;
     event::run(ctx, event_loop, state)
